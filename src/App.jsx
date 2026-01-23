@@ -1,5 +1,5 @@
 import { OrbitControls } from '@react-three/drei'
-import { Canvas, extend, useThree, type ThreeToJSXElements } from '@react-three/fiber'
+import { Canvas, extend, useThree } from '@react-three/fiber'
 import { Suspense, useEffect, useMemo } from 'react'
 
 import * as THREE from 'three/webgpu'
@@ -13,7 +13,6 @@ import {
   uv,
   mix,
 } from 'three/tsl';
-import type { WebGPURendererParameters } from 'three/src/renderers/webgpu/WebGPURenderer.Nodes.js';
 
 import InteractiveSphere from './components/InteractiveSphere';
 
@@ -24,9 +23,7 @@ const App = () => {
         style={{ width: '100vw', height: '100vh', display: 'block' }}
         shadows
         gl={async (props) => {
-          const renderer = new THREE.WebGPURenderer(
-            props as WebGPURendererParameters
-          );
+          const renderer = new THREE.WebGPURenderer;
           await renderer.init();
           console.log('Renderer backend', renderer.backend);
           return renderer;
