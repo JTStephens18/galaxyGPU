@@ -14,7 +14,10 @@ import {
   mix,
 } from 'three/tsl';
 
-import InteractiveSphere from './components/InteractiveSphere';
+// import InteractiveSphere from './components/InteractiveSphere';
+import Galaxy from './components/Galaxy';
+
+extend(THREE)
 
 const App = () => {
   return (
@@ -22,25 +25,49 @@ const App = () => {
       <Canvas
         style={{ width: '100vw', height: '100vh', display: 'block' }}
         shadows
+        camera={{ position: [3, 3, 3] }}
         gl={async (props) => {
-          const renderer = new THREE.WebGPURenderer;
+          const renderer = new THREE.WebGPURenderer(props);
           await renderer.init();
-          console.log('Renderer backend', renderer.backend);
+          // console.log('Renderer backend', renderer.backend);
           return renderer;
         }}
       >
-
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
+        {/* <ambientLight intensity={0.5} />
+        <directionalLight position={[10, 10, 5]} intensity={1} castShadow /> */}
 
         <Suspense>
+
+          <color attach="background" args={['#000000']} />
           <OrbitControls />
           {/* <Core /> */}
-          <InteractiveSphere />
+          <Galaxy />
         </Suspense>
       </Canvas>
     </>
   );
 }
+
+// const App = () => {
+//   return (
+//     <>
+//       <Canvas
+//         shadows
+//         camera={{ position: [3, 3, 3] }}
+//         gl={async (props) => {
+//           const renderer = new THREE.WebGPURenderer(props);
+//           await renderer.init();
+//           return renderer;
+//         }}
+//       >
+//         <Suspense>
+//           <color attach="background" args={['#000000']} />
+//           <OrbitControls />
+//           <Galaxy />
+//         </Suspense>
+//       </Canvas>
+//     </>
+//   );
+// };
 
 export default App
