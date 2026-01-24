@@ -102,6 +102,8 @@ const computeInit = Fn(() => {
 
 const computeUpdate = Fn(() => {
 
+    console.log("Compute update")
+
     const idx = instanceIndex;
 
     // Read current position from buffers
@@ -143,23 +145,6 @@ const Galaxy = () => {
     //     gl.compute(computeUpdate);
     // });
 
-    const compute = useCallback(async () => {
-        try {
-            await gl.computeAsync(computeInit);
-        } catch (error) {
-            console.error(error);
-        }
-    }, [gl]);
-
-    useEffect(() => {
-        compute();
-    }, [compute]);
-
-    useFrame((state) => {
-        const { gl } = state;
-        gl.compute(computeUpdate);
-    })
-
     // 2. Create the shader graph ONCE using useMemo
     const { posNode, positionLogic, colorNode, opacityNode, scaleNode } = useMemo(() => {
 
@@ -189,7 +174,24 @@ const Galaxy = () => {
             opacityNode: circleShape,
             scaleNode: uniform(0.8)
         }
-    }, [])
+    }, []);
+
+    const compute = useCallback(async () => {
+        try {
+            await gl.computeAsync(computeInit);
+        } catch (error) {
+            console.error(error);
+        }
+    }, [computeInit, gl]);
+
+    useEffect(() => {
+        compute();
+    }, [compute]);
+
+    useFrame(() => {
+        // const { gl } = state;
+        gl.compute(computeUpdate);
+    })
 
     return (
         <>
