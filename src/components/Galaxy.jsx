@@ -1,5 +1,5 @@
 import { useFrame, extend, useThree } from "@react-three/fiber";
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo, useEffect, useCallback } from "react";
 import * as THREE from 'three/webgpu';
 import { SpriteNodeMaterial, MeshBasicNodeMaterial } from 'three/webgpu';
 
@@ -7,14 +7,15 @@ import { SpriteNodeMaterial, MeshBasicNodeMaterial } from 'three/webgpu';
 import {
     Fn, float, int, vec2, vec3, sin, cos,
     instancedArray, instanceIndex, uniform,
-    texture, uv, smoothstep, mix, length, billboarding
+    texture, uv, smoothstep, mix, length, billboarding,
+    compute
 } from 'three/tsl';
 
 import { v4 as uuidv4 } from 'uuid';
 
 // extend(THREE);
 
-const STAR_COUNT = 1_000_000;
+const STAR_COUNT = 10;
 
 const positionBuffer = instancedArray(STAR_COUNT, 'vec3');
 const velocityBuffer = instancedArray(STAR_COUNT, 'vec3');
@@ -131,16 +132,33 @@ const Galaxy = () => {
 
     const { gl } = useThree();
 
-    // 2. Run initialization ONCE on mount
-    useEffect(() => {
-        // computeAsync is safer for WebGPU init steps
-        gl.computeAsync(computeInit);
+    // // 2. Run initialization ONCE on mount
+    // useEffect(() => {
+    //     // computeAsync is safer for WebGPU init steps
+    //     gl.computeAsync(computeInit);
+    // }, [gl]);
+
+    // // 3. Run update EVERY FRAME
+    // useFrame(() => {
+    //     gl.compute(computeUpdate);
+    // });
+
+    const compute = useCallback(async () => {
+        try {
+            await gl.computeAsync(computeInit);
+        } catch (error) {
+            console.error(error);
+        }
     }, [gl]);
 
-    // 3. Run update EVERY FRAME
-    useFrame(() => {
+    useEffect(() => {
+        compute();
+    }, [compute]);
+
+    useFrame((state) => {
+        const { gl } = state;
         gl.compute(computeUpdate);
-    });
+    })
 
     // 2. Create the shader graph ONCE using useMemo
     const { posNode, positionLogic, colorNode, opacityNode, scaleNode } = useMemo(() => {
@@ -151,7 +169,6 @@ const Galaxy = () => {
         const starPos = positionBuffer.toAttribute();
         const densityFactor = densityFactorBuffer.toAttribute();
 
-        // const positionLogic = starPos.add(billboarding().mul(uScale));
 
         // B. Procedural Circle (Fix: uv() is a function)
         const dist = uv().sub(0.5).length().mul(2.0);
@@ -162,7 +179,8 @@ const Galaxy = () => {
         // D. Color mixing
         const denseColor = vec3(0.4, 0.6, 1.0);
         const sparseColor = vec3(1.0, 0.6, 0.3);
-        const starColor = mix(denseColor, sparseColor, densityFactor);
+        // const starColor = mix(denseColor, sparseColor, densityFactor);
+        const starColor = sparseColor;
 
         return {
             // positionLogic,
@@ -174,203 +192,21 @@ const Galaxy = () => {
     }, [])
 
     return (
-        <instancedMesh args={[undefined, undefined, STAR_COUNT]} frustumCulled={false}>
-            {/* 3. Use PlaneGeometry. SpriteNodeMaterial will handle the billboarding (facing camera) */}
-            {/* <planeGeometry args={[1, 1]} /> */}
-
-            {/* 4. Pass the NODES to the props, not the material object */}
-            {/* <meshBasicNodeMaterial
-                transparent
-                blending={THREE.AdditiveBlending}
-                depthWrite={false}
-
-                vertexNode={billboarding()}
-
-                // TSL Inputs
-                positionNode={positionLogic}
-                colorNode={colorNode}
-                opacityNode={opacityNode}
-            // scaleNode={scaleNode}
-            /> */}
-
-
+        <>
             <sprite count={STAR_COUNT}>
                 <spriteNodeMaterial
                     key={uuidv4()}
                     colorNode={colorNode}
                     positionNode={posNode}
+                    scaleNode={scaleNode}
+                    opacityNode={opacityNode}
                     transparent
                     depthWrite={false}
                     blending={THREE.AdditiveBlending}
                 />
             </sprite>
-        </instancedMesh>
+        </>
     );
 }
 
 export default Galaxy;
-
-
-// import { OrbitControls } from '@react-three/drei';
-// import { Canvas, extend, useThree, useFrame } from '@react-three/fiber';
-// import { Suspense, useEffect, useMemo, useRef, useCallback } from 'react';
-// import * as THREE from 'three/webgpu';
-// import {
-//     vec3,
-//     mix,
-//     uv,
-//     Fn,
-//     instancedArray,
-//     instanceIndex,
-//     wgslFn,
-//     code,
-// } from 'three/tsl';
-// import { v4 as uuidv4 } from 'uuid';
-
-// // import './scene.css';
-
-// extend(THREE);
-
-// const COUNT = 30000;
-
-// const Galaxy = () => {
-//     const { gl } = useThree();
-
-//     const { nodes, uniforms, utils } = useMemo(() => {
-//         const spawnPositionsBuffer = instancedArray(COUNT, 'vec3');
-//         const offsetPositionsBuffer = instancedArray(COUNT, 'vec3');
-
-//         const spawnPosition = spawnPositionsBuffer.element(instanceIndex);
-//         const offsetPosition = offsetPositionsBuffer.element(instanceIndex);
-
-//         const hash = code(`
-//       fn hash(index: u32) -> f32 {
-//         return fract(sin(f32(index) * 12.9898) * 43758.5453);
-//       }
-//     `);
-
-//         const computeInitWgsl = wgslFn(`
-//       fn computeInit(
-//         spawnPositions: ptr<storage, array<vec3f>, read_write>,
-//         offsetPositions: ptr<storage, array<vec3f>, read_write>,
-//         index: u32
-//       ) -> void {
-//         let h0 = hash(index);
-//         let h1 = hash(index + 1u);
-//         let h2 = hash(index + 2u);
-        
-//         let distance = sqrt(h0 * 4.0);
-//         let theta = h1 * 6.28318530718; // 2 * PI
-//         let phi = h2 * 3.14159265359; // PI
-        
-//         let x = distance * sin(phi) * cos(theta);
-//         let y = distance * sin(phi) * sin(theta);
-//         let z = distance * cos(phi);
-        
-//         spawnPositions[index] = vec3f(x, y, z);
-//         offsetPositions[index] = vec3f(0.0);
-//       }
-//     `,
-//             [hash],
-//         );
-
-//         const computeNode = computeInitWgsl({
-//             spawnPositions: spawnPositionsBuffer,
-//             offsetPositions: offsetPositionsBuffer,
-//             index: instanceIndex,
-//         }).compute(COUNT);
-
-//         const scaleNode = wgslFn(`
-//       fn scaleNode() -> f32 {
-//         return randValue(0.01, 0.04, 3u);
-//       }
-    
-//       fn randValue(min: f32, max: f32, seed: u32) -> f32 {
-//         return hash(seed) * (max - min) + min;
-//       }
-//     `,
-//             [hash],
-//         )();
-
-//         const positionNode = Fn(() => {
-//             const pos = spawnPosition.add(offsetPosition);
-//             return pos;
-//         })();
-
-//         const particleColor = wgslFn(`
-//       fn colorNode(
-//         spawnPos: vec3f,
-//         offsetPos: vec3f,
-//         uvCoord: vec2f
-//       ) -> vec4f {
-//         let color = vec3f(0.24, 0.43, 0.96);
-//         let distanceToCenter = min(
-//           distance(spawnPos + offsetPos, vec3f(0.0, 0.0, 0.0)),
-//           2.75
-//         );
-        
-//         let strength = distance(uvCoord, vec2f(0.5));
-        
-//         let distColor = mix(
-//           vec3f(0.97, 0.7, 0.45),
-//           color,
-//           distanceToCenter * 0.4
-//         );
-        
-//         let fillMask = 1.0 - strength * 2.0;
-//         let finalColor = mix(vec3f(0.0), distColor, fillMask);
-        
-//         let circle = smoothstep(0.5, 0.49, strength);
-//         return vec4f(finalColor * circle, 1.0);
-//       }
-//     `);
-
-//         const colorNode = particleColor({
-//             spawnPos: spawnPosition,
-//             offsetPos: offsetPosition,
-//             uvCoord: uv(),
-//         });
-
-
-//         return {
-//             nodes: {
-//                 positionNode,
-//                 computeNode,
-//                 colorNode,
-//                 scaleNode,
-//             },
-//             uniforms: {},
-//             utils: {}
-//         }
-//     }, []);
-
-//     const compute = useCallback(async () => {
-//         try {
-//             await gl.computeAsync(nodes.computeNode);
-//         } catch (error) {
-//             console.error(error);
-//         }
-//     }, [nodes.computeNode, gl]);
-
-//     useEffect(() => {
-//         compute();
-//     }, [compute]);
-
-//     return (
-//         <>
-//             <sprite count={COUNT}>
-//                 <spriteNodeMaterial
-//                     key={uuidv4()}
-//                     colorNode={nodes.colorNode}
-//                     positionNode={nodes.positionNode}
-//                     scaleNode={nodes.scaleNode}
-//                     transparent
-//                     depthWrite={false}
-//                     blending={THREE.AdditiveBlending}
-//                 />
-//             </sprite>
-//         </>
-//     );
-// };
-
-// export default Galaxy
