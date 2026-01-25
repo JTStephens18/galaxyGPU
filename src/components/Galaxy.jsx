@@ -151,8 +151,10 @@ const Galaxy = () => {
         const uScale = uniform(0.8);
 
         // A. Convert buffers to TSL attributes
-        const starPos = positionBuffer.toAttribute();
-        const densityFactor = densityFactorBuffer.toAttribute();
+        // const starPos = positionBuffer.toAttribute();
+        const starPos = positionBuffer.element(instanceIndex);
+        // const densityFactor = densityFactorBuffer.toAttribute();
+        const densityFactor = densityFactorBuffer.element(instanceIndex);
 
 
         // B. Procedural Circle (Fix: uv() is a function)
@@ -164,8 +166,8 @@ const Galaxy = () => {
         // D. Color mixing
         const denseColor = vec3(0.4, 0.6, 1.0);
         const sparseColor = vec3(1.0, 0.6, 0.3);
-        // const starColor = mix(denseColor, sparseColor, densityFactor);
-        const starColor = sparseColor;
+        const starColor = mix(denseColor, sparseColor, densityFactor);
+        // const starColor = vec3(0.0, 1.0, 0.0);
 
         return {
             // positionLogic,
@@ -197,7 +199,6 @@ const Galaxy = () => {
         <>
             <sprite count={STAR_COUNT}>
                 <spriteNodeMaterial
-                    key={uuidv4()}
                     colorNode={colorNode}
                     positionNode={posNode}
                     scaleNode={scaleNode}

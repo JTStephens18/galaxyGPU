@@ -17,6 +17,7 @@ import {
 // import InteractiveSphere from './components/InteractiveSphere';
 import Galaxy from './components/Galaxy';
 import Core from './components/ThomasAttractor'
+import WaterDrop from './components/WaterDrop';
 
 extend(THREE)
 
@@ -41,8 +42,9 @@ const App = () => {
 
           <color attach="background" args={['rgba(43, 32, 32, 1)']} />
           <OrbitControls />
-          <Core />
+          {/* <Core /> */}
           {/* <Galaxy /> */}
+          <WaterDrop />
         </Suspense>
       </Canvas>
     </>
