@@ -41,7 +41,7 @@ const App = () => {
 
         <Suspense>
 
-          <color attach="background" args={['rgba(43, 32, 32, 1)']} />
+          <color attach="background" args={['rgba(0, 0, 0, 1)']} />
           <OrbitControls />
           {/* <Core /> */}
           {/* <Galaxy /> */}
