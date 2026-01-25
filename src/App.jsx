@@ -18,6 +18,7 @@ import {
 import Galaxy from './components/Galaxy';
 import Core from './components/ThomasAttractor'
 import WaterDrop from './components/WaterDrop';
+import Spiral from './components/Spiral';
 
 extend(THREE)
 
@@ -44,7 +45,8 @@ const App = () => {
           <OrbitControls />
           {/* <Core /> */}
           {/* <Galaxy /> */}
-          <WaterDrop />
+          {/* <WaterDrop /> */}
+          <Spiral />
         </Suspense>
       </Canvas>
     </>
