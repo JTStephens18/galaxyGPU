@@ -14,7 +14,7 @@ import {
 
 extend(THREE);
 
-const STAR_COUNT = 1_000_0;
+const STAR_COUNT = 1_000;
 
 const Spiral = () => {
 
@@ -57,6 +57,11 @@ const Spiral = () => {
         })().compute(STAR_COUNT);
 
         // ========= 
+
+        //         const hash = Fn(([seed]) => {
+        //     const h = seed.fract().mul(0.1031);
+        //     return h.mul(h.add(33.33)).mul(h.add(h)).fract();
+        // });
 
         const rotateXZ = Fn(([p, angle]) => {
             const cosA = cos(angle);
@@ -137,6 +142,7 @@ const Spiral = () => {
             // Read current position from buffers
 
             const position = positionBuffer.element(idx).toVar();
+            console.log("Position ", position);
             const velocity = velocityBuffer.element(idx).toVar();
 
             const deltaTime = uniform(0.016); // ~60 FPS
