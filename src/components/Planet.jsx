@@ -5,6 +5,7 @@ import * as THREE from 'three/webgpu';
 import {
     uniform, float, vec3, vec2,
     storage, instanceIndex, vertexIndex, instancedArray, Fn,
+    cameraPosition, floor,
 } from "three/tsl"
 
 import { cnoise } from "./Perlin"
@@ -20,25 +21,38 @@ const Planet = () => {
     const planeWidthSegments = 100;
     const planeHeightSegments = 100;
 
+    // Calculate grid cell for snapping
+    const segmentSize = planeWidth / planeWidthSegments;
+
     const planetMeshRef = useRef();
 
     const count = (planeWidthSegments + 1) * (planeHeightSegments + 1)
 
-    // Initialize storage buffer with plane data
-    const positionStorageAttribute = useMemo(() => {
+    // 1. CREATE TWO BUFFERS
+    // 'baseStorageAttribute' is our permanent reference (Local Space)
+    // 'positionStorageAttribute' is what we update and render (World Space)
+    const { positionStorageAttribute, baseStorageAttribute } = useMemo(() => {
         const tempGeom = new THREE.PlaneGeometry(planeWidth, planeHeight, planeWidthSegments, planeHeightSegments);
 
         const initialData = tempGeom.attributes.position.array;
 
-        const buffer = new THREE.StorageBufferAttribute(initialData, 3);
+        const posBuffer = new THREE.StorageBufferAttribute(initialData, 3);
+        const baseBuffer = new THREE.StorageBufferAttribute(new Float32Array(initialData), 3);
 
-        return buffer;
+        return {
+            positionStorageAttribute: posBuffer,
+            baseStorageAttribute: baseBuffer
+        };
     }, []);
 
     const { nodes, uniforms } = useMemo(() => {
 
         const positionBuffer = storage(positionStorageAttribute, 'vec3', count);
+        const baseBuffer = storage(baseStorageAttribute, 'vec3', count);
+
         const time = uniform(0);
+        const uSegmentSize = uniform(segmentSize);
+        const uCameraPosition = uniform(new THREE.Vector3());
 
         const computeInit = Fn(() => {
             // Wrap storage buffer in TSL storage node    
@@ -47,19 +61,36 @@ const Planet = () => {
 
         const computeUpdate = Fn(() => {
             const index = instanceIndex;
-            const currentPos = positionBuffer.element(index);
 
-            const x = currentPos.x;
-            const y = currentPos.y;
+            // 2. GET BASE POSITION
+            // Read from the read-only buffer so we don't lose the grid shape
+            const localPos = baseBuffer.element(index);
 
-            const wave = x.add(time).sin().mul(0.5);
+            // 3. CALCULATE "SNAPPED" CAMERA OFFSET
+            // We take camera position, divide by cell size, floor it, then multiply back.
+            // This ensures the grid jumps in exact "grid-unit" steps, preventing texture jitter.
+            // Note: We usually care about X and Y for a plane. If you rotated the plane, use X and Z.
+            // Assuming default PlaneGeometry (which is X/Y):
+            const snapX = uCameraPosition.x.div(uSegmentSize).floor().mul(uSegmentSize);
+            const snapY = uCameraPosition.y.div(uSegmentSize).floor().mul(uSegmentSize);
 
-            const z = cnoise(vec2(y.mul(0.5), x.mul(0.5)));
+            // Create the World Offset Vector
+            const worldOffset = vec3(snapX, snapY, 0.0);
 
-            // const inc = currentPos.z.add(float(index));
+            // 4. APPLY OFFSET TO GET WORLD POSITION
+            // The grid physically moves to follow the camera
+            const worldPos = localPos.add(worldOffset);
 
-            // currentPos.z.assign(wave);
-            currentPos.z.assign(z);
+            // 5. SAMPLE NOISE AT WORLD POSITION
+            // The noise pattern stays fixed in the world, even though the mesh is moving
+            const noiseInput = vec2(worldPos.x.mul(0.5), worldPos.y.mul(0.5));
+            const z = cnoise(noiseInput); // Add .add(time) here for animation
+
+            // 6. WRITE BACK TO POSITION BUFFER
+            // We update the Z height, but we also update X and Y so the mesh follows the camera
+            const finalPos = vec3(worldPos.x, worldPos.y, z);
+
+            positionBuffer.element(index).assign(finalPos);
         })().compute(count);
 
         const positionNode = Fn(() => {
@@ -74,6 +105,8 @@ const Planet = () => {
             },
             uniforms: {
                 time,
+                uSegmentSize,
+                uCameraPosition,
             }
         }
 
@@ -93,15 +126,16 @@ const Planet = () => {
     }, [compute]);
 
     useFrame((state) => {
-        const { clock, gl } = state;
+        const { clock, gl, camera } = state;
 
         uniforms.time.value = clock.getElapsedTime();
+        uniforms.uCameraPosition.value.copy(camera.position);
         gl.compute(nodes.computeUpdate);
     })
 
 
     return (
-        <mesh ref={planetMeshRef}>
+        <mesh ref={planetMeshRef} frustumCulled={false}>
             <planeGeometry args={[planeWidth, planeHeight, planeWidthSegments, planeHeightSegments]} />
             <meshBasicNodeMaterial
                 positionNode={nodes.positionNode}
