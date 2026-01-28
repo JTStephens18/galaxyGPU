@@ -33,6 +33,7 @@ const Planet = () => {
     // 'positionStorageAttribute' is what we update and render (World Space)
     const { positionStorageAttribute, baseStorageAttribute } = useMemo(() => {
         const tempGeom = new THREE.PlaneGeometry(planeWidth, planeHeight, planeWidthSegments, planeHeightSegments);
+        tempGeom.rotateX(-Math.PI / 2); // Rotate to lie on XZ plane
 
         const initialData = tempGeom.attributes.position.array;
 
@@ -69,13 +70,11 @@ const Planet = () => {
             // 3. CALCULATE "SNAPPED" CAMERA OFFSET
             // We take camera position, divide by cell size, floor it, then multiply back.
             // This ensures the grid jumps in exact "grid-unit" steps, preventing texture jitter.
-            // Note: We usually care about X and Y for a plane. If you rotated the plane, use X and Z.
-            // Assuming default PlaneGeometry (which is X/Y):
             const snapX = uCameraPosition.x.div(uSegmentSize).floor().mul(uSegmentSize);
-            const snapY = uCameraPosition.y.div(uSegmentSize).floor().mul(uSegmentSize);
+            const snapZ = uCameraPosition.z.div(uSegmentSize).floor().mul(uSegmentSize);
 
-            // Create the World Offset Vector
-            const worldOffset = vec3(snapX, snapY, 0.0);
+            // Create the World Offset Vector (moving on X and Z for the ground)
+            const worldOffset = vec3(snapX, 0.0, snapZ);
 
             // 4. APPLY OFFSET TO GET WORLD POSITION
             // The grid physically moves to follow the camera
@@ -83,12 +82,12 @@ const Planet = () => {
 
             // 5. SAMPLE NOISE AT WORLD POSITION
             // The noise pattern stays fixed in the world, even though the mesh is moving
-            const noiseInput = vec2(worldPos.x.mul(0.5), worldPos.y.mul(0.5));
-            const z = cnoise(noiseInput); // Add .add(time) here for animation
+            const noiseInput = vec2(worldPos.x.mul(0.5), worldPos.z.mul(0.5));
+            const height = cnoise(noiseInput); // Height is now on the Y axis
 
             // 6. WRITE BACK TO POSITION BUFFER
-            // We update the Z height, but we also update X and Y so the mesh follows the camera
-            const finalPos = vec3(worldPos.x, worldPos.y, z);
+            // We update the Y height, but we also update X and Z so the mesh follows the camera
+            const finalPos = vec3(worldPos.x, height, worldPos.z);
 
             positionBuffer.element(index).assign(finalPos);
         })().compute(count);
