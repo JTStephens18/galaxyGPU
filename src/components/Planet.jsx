@@ -12,9 +12,9 @@ import { cnoise } from "./Perlin"
 
 extend(THREE);
 
-const Planet = () => {
+const Planet = ({ followPosition = null }) => {
 
-    const { scene, gl } = useThree();
+    const { scene, gl, camera } = useThree();
 
     const planeWidth = 10;
     const planeHeight = 10;
@@ -128,7 +128,9 @@ const Planet = () => {
         const { clock, gl, camera } = state;
 
         uniforms.time.value = clock.getElapsedTime();
-        uniforms.uCameraPosition.value.copy(camera.position);
+        // Use followPosition if provided, otherwise fall back to camera
+        const targetPos = followPosition || camera.position;
+        uniforms.uCameraPosition.value.copy(targetPos);
         gl.compute(nodes.computeUpdate);
     })
 
