@@ -43,6 +43,7 @@ function AirshipController({
         currentRotation: new THREE.Quaternion(),
         targetRotation: new THREE.Quaternion(),
         cameraTargetPos: new THREE.Vector3(),
+        cameraLookTarget: new THREE.Vector3(), // Smoothed lookAt target
         inputDirection: new THREE.Vector3(),
         // Track facing direction separately from movement
         facingDirection: new THREE.Vector3(0, 0, -1),
@@ -124,11 +125,13 @@ function AirshipController({
             offset.applyQuaternion(state.currentRotation);
             state.cameraTargetPos.copy(playerPos).add(offset);
 
-            // Smooth camera movement (lag effect)
-            camera.position.lerp(state.cameraTargetPos, delta * 3);
+            // Use high smoothing factor for tight follow (reduces jitter)
+            const smoothFactor = 1 - Math.exp(-delta * 10);
+            camera.position.lerp(state.cameraTargetPos, smoothFactor);
 
-            // Camera always looks at player
-            camera.lookAt(playerPos);
+            // Smooth the lookAt target as well to prevent snapping
+            state.cameraLookTarget.lerp(playerPos, smoothFactor);
+            camera.lookAt(state.cameraLookTarget);
         }
 
         // === G. NOTIFY TERRAIN ===
@@ -154,10 +157,10 @@ function AirshipController({
                 args={[
                     new THREE.Vector3(0, 0, -1), // direction
                     new THREE.Vector3(0, 0, 0),  // origin
-                    2,                            // length
+                    1,                            // length
                     0x00ff00,                     // color (green)
-                    0.4,                          // headLength
-                    0.2                           // headWidth
+                    0.2,                          // headLength
+                    0.1                           // headWidth
                 ]}
             />
         </RigidBody>

@@ -16,8 +16,8 @@ const Planet = ({ followPosition = null }) => {
 
     const { scene, gl, camera } = useThree();
 
-    const planeWidth = 10;
-    const planeHeight = 10;
+    const planeWidth = 100;
+    const planeHeight = 100;
     const planeWidthSegments = 100;
     const planeHeightSegments = 100;
 
@@ -82,8 +82,10 @@ const Planet = ({ followPosition = null }) => {
 
             // 5. SAMPLE NOISE AT WORLD POSITION
             // The noise pattern stays fixed in the world, even though the mesh is moving
-            const noiseInput = vec2(worldPos.x.mul(0.5), worldPos.z.mul(0.5));
-            const height = cnoise(noiseInput); // Height is now on the Y axis
+            // Frequency scaled for larger terrain, amplitude scaled up to maintain hills/valleys
+            const noiseInput = vec2(worldPos.x.mul(0.1), worldPos.z.mul(0.1));
+            const noiseValue = cnoise(noiseInput);
+            const height = noiseValue.mul(10); // Amplify height for larger terrain
 
             // 6. WRITE BACK TO POSITION BUFFER
             // We update the Y height, but we also update X and Z so the mesh follows the camera

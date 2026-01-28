@@ -9,7 +9,7 @@ const Player = forwardRef(function Player({ bobOffset = 0 }, ref) {
         <group ref={ref}>
             {/* Capsule mesh offset by bobOffset for visual bobbing */}
             <mesh position={[0, bobOffset, 0]}>
-                <capsuleGeometry args={[0.3, 0.8, 4, 16]} />
+                <capsuleGeometry args={[0.15, 0.4, 4, 16]} />
                 <meshBasicMaterial color="#00ffff" wireframe />
             </mesh>
         </group>
