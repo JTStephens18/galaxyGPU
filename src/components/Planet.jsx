@@ -7,7 +7,7 @@ import { TextureLoader } from "three";
 import {
     uniform, float, vec3, vec2,
     storage, instanceIndex, vertexIndex, instancedArray, Fn,
-    cameraPosition, floor, smoothstep, color, texture, mix, Loop, positionWorld,
+    cameraPosition, floor, smoothstep, color, texture, mix, Loop, positionWorld, max, step, dFdx, dFdy, cross, normalize, dot
 } from "three/tsl"
 
 import { cnoise } from "./Perlin"
@@ -42,15 +42,21 @@ const Planet = ({ followPosition = null }) => {
         lacunarity,
         persistence,
         heightScale,
-        heightOffset
+        heightOffset,
+        waterFloor,
+        horizonDistance,
+        horizonCurve
     } = useControls('Planet Terrain', {
         octaves: { value: 2, min: 1, max: 12, step: 1 },
         frequency: { value: 0.06, min: 0.001, max: 0.5, step: 0.001 },
-        amplitude: { value: 0.3, min: 0.1, max: 5.0, step: 0.1 },
+        amplitude: { value: 0.2, min: 0.1, max: 5.0, step: 0.1 },
         lacunarity: { value: 1.6, min: 1.0, max: 4.0, step: 0.1 },
         persistence: { value: 0.90, min: 0.1, max: 1.0, step: 0.05 },
-        heightScale: { value: 20, min: 1, max: 100, step: 1 },
-        heightOffset: { value: 0.15, min: -1.0, max: 1.0, step: 0.05 },
+        heightScale: { value: 35, min: 1, max: 100, step: 1 },
+        heightOffset: { value: 0.09, min: -1.0, max: 1.0, step: 0.01 },
+        waterFloor: { value: -2.0, min: -20, max: 0, step: 0.1 },
+        horizonDistance: { value: 50.0, min: 10, max: 200 },
+        horizonCurve: { value: 0.05, min: 0, max: 0.5, step: 0.01 },
     });
 
     const {
@@ -70,8 +76,8 @@ const Planet = ({ followPosition = null }) => {
     });
 
     const [waterTex, sandTex, grassTex, rockTex] = useLoader(TextureLoader, [
-        "/water2.png",
-        "/sand.jpg",
+        "/water3.png",
+        "/dirt.png",
         "/grass1.png",
         "/rock.jpg"
     ]);
@@ -128,6 +134,9 @@ const Planet = ({ followPosition = null }) => {
         const uPersistence = uniform(persistence);
         const uHeightScale = uniform(heightScale);
         const uHeightOffset = uniform(heightOffset);
+        const uWaterFloor = uniform(waterFloor);
+        const uHorizonDist = uniform(horizonDistance);
+        const uHorizonCurve = uniform(horizonCurve);
 
         const uSandStart = uniform(sandStart);
         const uSandEnd = uniform(sandEnd);
@@ -161,15 +170,31 @@ const Planet = ({ followPosition = null }) => {
             // The grid physically moves to follow the camera
             const worldPos = localPos.add(worldOffset);
 
+            // Horizontal Curvature logic
+            // Calculate distance from camear to this vertex
+            const distToCam = worldPos.xz.sub(uCameraPosition.xz).length();
+
+            const curveDistance = max(0.0, distToCam.sub(uHorizonDist));
+            const drop = curveDistance.mul(curveDistance).mul(uHorizonCurve);
+
+            // const precision = float(1.25); // Increase this value for more "blockiness"
+            // const snappedX = worldPos.x.div(precision).floor().mul(precision);
+            // const snappedZ = worldPos.z.div(precision).floor().mul(precision);
+            // const noiseValue = fbm(vec3(snappedX, 0.0, snappedZ), octaves, uFrequency, uAmplitude, uLacunarity, uPersistence);
+
             // 5. SAMPLE NOISE AT WORLD POSITION
             // The noise pattern stays fixed in the world, even though the mesh is moving
             const noiseValue = fbm(worldPos, octaves, uFrequency, uAmplitude, uLacunarity, uPersistence)
             // Add offset to shift terrain upward (less water, more land)
-            const height = noiseValue.add(uHeightOffset).mul(uHeightScale);
+            const rawHeight = noiseValue.add(uHeightOffset).mul(uHeightScale);
+            // Clamp to water floor to flatten lake bottoms (no pointed valleys)
+            const terrainHeight = max(rawHeight, uWaterFloor);
+
+            const finalHeight = terrainHeight.sub(drop);
 
             // 6. WRITE BACK TO POSITION BUFFER
             // We update the Y height, but we also update X and Z so the mesh follows the camera
-            const finalPos = vec3(worldPos.x, height, worldPos.z);
+            const finalPos = vec3(worldPos.x, finalHeight, worldPos.z);
 
             positionBuffer.element(index).assign(finalPos);
         })().compute(count);
@@ -230,6 +255,7 @@ const Planet = ({ followPosition = null }) => {
                 uPersistence,
                 uHeightScale,
                 uHeightOffset,
+                uWaterFloor,
                 uSandStart,
                 uSandEnd,
                 uGrassStart,
@@ -269,6 +295,7 @@ const Planet = ({ followPosition = null }) => {
         uniforms.uPersistence.value = persistence;
         uniforms.uHeightScale.value = heightScale;
         uniforms.uHeightOffset.value = heightOffset;
+        uniforms.uWaterFloor.value = waterFloor;
 
         uniforms.uSandStart.value = sandStart;
         uniforms.uSandEnd.value = sandEnd;
