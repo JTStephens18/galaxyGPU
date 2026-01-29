@@ -41,14 +41,16 @@ const Planet = ({ followPosition = null }) => {
         amplitude,
         lacunarity,
         persistence,
-        heightScale
+        heightScale,
+        heightOffset
     } = useControls('Planet Terrain', {
-        octaves: { value: 6, min: 1, max: 12, step: 1 },
-        frequency: { value: 0.05, min: 0.001, max: 0.5, step: 0.001 },
-        amplitude: { value: 1.0, min: 0.1, max: 5.0, step: 0.1 },
-        lacunarity: { value: 2.0, min: 1.0, max: 4.0, step: 0.1 },
-        persistence: { value: 0.5, min: 0.1, max: 1.0, step: 0.05 },
-        heightScale: { value: 15, min: 1, max: 100, step: 1 },
+        octaves: { value: 2, min: 1, max: 12, step: 1 },
+        frequency: { value: 0.06, min: 0.001, max: 0.5, step: 0.001 },
+        amplitude: { value: 0.3, min: 0.1, max: 5.0, step: 0.1 },
+        lacunarity: { value: 1.6, min: 1.0, max: 4.0, step: 0.1 },
+        persistence: { value: 0.90, min: 0.1, max: 1.0, step: 0.05 },
+        heightScale: { value: 20, min: 1, max: 100, step: 1 },
+        heightOffset: { value: 0.15, min: -1.0, max: 1.0, step: 0.05 },
     });
 
     const {
@@ -125,6 +127,7 @@ const Planet = ({ followPosition = null }) => {
         const uLacunarity = uniform(lacunarity);
         const uPersistence = uniform(persistence);
         const uHeightScale = uniform(heightScale);
+        const uHeightOffset = uniform(heightOffset);
 
         const uSandStart = uniform(sandStart);
         const uSandEnd = uniform(sandEnd);
@@ -161,7 +164,8 @@ const Planet = ({ followPosition = null }) => {
             // 5. SAMPLE NOISE AT WORLD POSITION
             // The noise pattern stays fixed in the world, even though the mesh is moving
             const noiseValue = fbm(worldPos, octaves, uFrequency, uAmplitude, uLacunarity, uPersistence)
-            const height = noiseValue.mul(uHeightScale);
+            // Add offset to shift terrain upward (less water, more land)
+            const height = noiseValue.add(uHeightOffset).mul(uHeightScale);
 
             // 6. WRITE BACK TO POSITION BUFFER
             // We update the Y height, but we also update X and Z so the mesh follows the camera
@@ -225,6 +229,7 @@ const Planet = ({ followPosition = null }) => {
                 uLacunarity,
                 uPersistence,
                 uHeightScale,
+                uHeightOffset,
                 uSandStart,
                 uSandEnd,
                 uGrassStart,
@@ -263,6 +268,7 @@ const Planet = ({ followPosition = null }) => {
         uniforms.uLacunarity.value = lacunarity;
         uniforms.uPersistence.value = persistence;
         uniforms.uHeightScale.value = heightScale;
+        uniforms.uHeightOffset.value = heightOffset;
 
         uniforms.uSandStart.value = sandStart;
         uniforms.uSandEnd.value = sandEnd;
