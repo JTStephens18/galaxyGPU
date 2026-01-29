@@ -55,8 +55,8 @@ const Planet = ({ followPosition = null }) => {
         heightScale: { value: 35, min: 1, max: 100, step: 1 },
         heightOffset: { value: 0.09, min: -1.0, max: 1.0, step: 0.01 },
         waterFloor: { value: -2.0, min: -20, max: 0, step: 0.1 },
-        horizonDistance: { value: 50.0, min: 10, max: 200 },
-        horizonCurve: { value: 0.05, min: 0, max: 0.5, step: 0.01 },
+        horizonDistance: { value: 116, min: 10, max: 200 },
+        horizonCurve: { value: 0.06, min: 0, max: 0.5, step: 0.01 },
     });
 
     const {
@@ -94,8 +94,8 @@ const Planet = ({ followPosition = null }) => {
     skyTex.mapping = THREE.EquirectangularReflectionMapping;
     scene.background = skyTex;
 
-    const planeWidth = 100;
-    const planeHeight = 100;
+    const planeWidth = 512;
+    const planeHeight = 512;
     const planeWidthSegments = 100;
     const planeHeightSegments = 100;
 
@@ -174,13 +174,6 @@ const Planet = ({ followPosition = null }) => {
             // The grid physically moves to follow the camera
             const worldPos = localPos.add(worldOffset);
 
-            // Horizontal Curvature logic
-            // Calculate distance from camear to this vertex
-            const distToCam = worldPos.xz.sub(uCameraPosition.xz).length();
-
-            const curveDistance = max(0.0, distToCam.sub(uHorizonDist));
-            const drop = curveDistance.mul(curveDistance).mul(uHorizonCurve);
-
             // const precision = float(1.25); // Increase this value for more "blockiness"
             // const snappedX = worldPos.x.div(precision).floor().mul(precision);
             // const snappedZ = worldPos.z.div(precision).floor().mul(precision);
@@ -192,9 +185,27 @@ const Planet = ({ followPosition = null }) => {
             // Add offset to shift terrain upward (less water, more land)
             const rawHeight = noiseValue.add(uHeightOffset).mul(uHeightScale);
             // Clamp to water floor to flatten lake bottoms (no pointed valleys)
-            const terrainHeight = max(rawHeight, uWaterFloor);
+            // const terrainHeight = max(rawHeight, uWaterFloor);
+            // const finalHeight = terrainHeight.sub(drop);
 
-            const finalHeight = terrainHeight.sub(drop);
+            // Horizontal Curvature logic
+            // Calculate distance from camear to this vertex
+            const distToCam = worldPos.xz.sub(uCameraPosition.xz).length();
+
+            // const curveDistance = max(0.0, distToCam.sub(uHorizonDist));
+            // const drop = curveDistance.mul(curveDistance).mul(uHorizonCurve);
+
+            const normalizedDist = distToCam.div(uHorizonDist);
+            const drop = normalizedDist.pow(3.0).mul(uHorizonCurve).mul(100.0);
+
+            // 3. Apply the drop to the "Base Level"
+            // We subtract the drop from the raw height AND the water floor threshold
+            const curvedHeight = rawHeight.sub(drop);
+            const curvedWaterFloor = uWaterFloor.sub(drop);
+
+            // 4. Clamp the height
+            // Now the land stays relative to the water floor even as they both curve down
+            const finalHeight = max(curvedHeight, curvedWaterFloor);
 
             // 6. WRITE BACK TO POSITION BUFFER
             // We update the Y height, but we also update X and Z so the mesh follows the camera
@@ -213,7 +224,18 @@ const Planet = ({ followPosition = null }) => {
         const colorNode = Fn(() => {
             const pos = positionWorld;
 
-            const h = pos.y;
+            const dist = pos.xz.sub(cameraPosition.xz).length();
+
+            // Re-calculate the drop amount used in the compute shader
+            const normalizedDist = dist.div(uHorizonDist);
+            const drop = normalizedDist.pow(4.0).mul(uHorizonCurve).mul(100.0);
+
+            // Use "Visual Height" (Actual height + the drop) for texturing
+            const visualHeight = pos.y.add(drop);
+
+            const h = visualHeight;
+
+            // const h = pos.y;
 
             const worldUV = pos.xz.mul(0.25);
             const waterWorldUV = pos.xz.mul(1.0);
