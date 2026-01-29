@@ -1,5 +1,6 @@
 import { useFrame, extend, useThree, useLoader } from "@react-three/fiber";
 import React, { useMemo, useEffect, useCallback, useRef } from "react";
+import { useControls } from "leva";
 import * as THREE from 'three/webgpu';
 import { TextureLoader } from "three";
 
@@ -13,21 +14,19 @@ import { cnoise } from "./Perlin"
 
 extend(THREE);
 
-const fmb = Fn(([pos]) => {
+const fbm = Fn(([pos, octaves, frequency, amplitude, lacunarity, persistence]) => {
     const p = vec3(pos).toVar();
     const total = float(0.0).toVar();
-    const amplitude = float(1.0).toVar();
-    const frequency = float(0.05).toVar();
-    const maxVal = float(0.0).toVar();
+    const currFreq = float(frequency).toVar();
+    const currAmp = float(amplitude).toVar();
 
-    Loop({ start: 0, end: 6 }, () => {
-        const noiseVal = cnoise(vec3(p.x.mul(frequency), 0.0, p.z.mul(frequency)));
+    Loop({ start: 0, end: octaves }, () => {
+        const noiseVal = cnoise(vec3(p.x.mul(currFreq), 0.0, p.z.mul(currFreq)));
 
-        total.addAssign(noiseVal.mul(amplitude));
-        maxVal.addAssign(amplitude); // Accumulate max amplitude for normalization
+        total.addAssign(noiseVal.mul(currAmp));
 
-        frequency.mulAssign(2.0); // Lacunarity
-        amplitude.mulAssign(0.5); // Persistence
+        currFreq.mulAssign(lacunarity);
+        currAmp.mulAssign(persistence);
     });
     return total;
 });
@@ -35,6 +34,38 @@ const fmb = Fn(([pos]) => {
 const Planet = ({ followPosition = null }) => {
 
     const { scene, gl, camera } = useThree();
+
+    const {
+        octaves,
+        frequency,
+        amplitude,
+        lacunarity,
+        persistence,
+        heightScale
+    } = useControls('Planet Terrain', {
+        octaves: { value: 6, min: 1, max: 12, step: 1 },
+        frequency: { value: 0.05, min: 0.001, max: 0.5, step: 0.001 },
+        amplitude: { value: 1.0, min: 0.1, max: 5.0, step: 0.1 },
+        lacunarity: { value: 2.0, min: 1.0, max: 4.0, step: 0.1 },
+        persistence: { value: 0.5, min: 0.1, max: 1.0, step: 0.05 },
+        heightScale: { value: 15, min: 1, max: 100, step: 1 },
+    });
+
+    const {
+        sandStart,
+        sandEnd,
+        grassStart,
+        grassEnd,
+        rockStart,
+        rockEnd
+    } = useControls('Planet Material', {
+        sandStart: { value: -1.0, min: -10, max: 10, step: 0.1 },
+        sandEnd: { value: 1.5, min: -5, max: 15, step: 0.1 },
+        grassStart: { value: 1.5, min: -5, max: 15, step: 0.1 },
+        grassEnd: { value: 3.0, min: 0, max: 20, step: 0.1 },
+        rockStart: { value: 6.0, min: 0, max: 30, step: 0.1 },
+        rockEnd: { value: 8.0, min: 5, max: 50, step: 0.1 },
+    });
 
     const [waterTex, sandTex, grassTex, rockTex] = useLoader(TextureLoader, [
         "/water.png",
@@ -86,6 +117,18 @@ const Planet = ({ followPosition = null }) => {
         const time = uniform(0);
         const uSegmentSize = uniform(segmentSize);
         const uCameraPosition = uniform(new THREE.Vector3());
+        const uFrequency = uniform(frequency);
+        const uAmplitude = uniform(amplitude);
+        const uLacunarity = uniform(lacunarity);
+        const uPersistence = uniform(persistence);
+        const uHeightScale = uniform(heightScale);
+
+        const uSandStart = uniform(sandStart);
+        const uSandEnd = uniform(sandEnd);
+        const uGrassStart = uniform(grassStart);
+        const uGrassEnd = uniform(grassEnd);
+        const uRockStart = uniform(rockStart);
+        const uRockEnd = uniform(rockEnd);
 
         const computeInit = Fn(() => {
             // Wrap storage buffer in TSL storage node    
@@ -114,11 +157,8 @@ const Planet = ({ followPosition = null }) => {
 
             // 5. SAMPLE NOISE AT WORLD POSITION
             // The noise pattern stays fixed in the world, even though the mesh is moving
-            // Frequency scaled for larger terrain, amplitude scaled up to maintain hills/valleys
-            const noiseInput = vec2(worldPos.x.mul(0.1), worldPos.z.mul(0.1));
-            // const noiseValue = cnoise(noiseInput);
-            const noiseValue = fmb(worldPos)
-            const height = noiseValue.mul(15); // Amplify height for larger terrain
+            const noiseValue = fbm(worldPos, octaves, uFrequency, uAmplitude, uLacunarity, uPersistence)
+            const height = noiseValue.mul(uHeightScale);
 
             // 6. WRITE BACK TO POSITION BUFFER
             // We update the Y height, but we also update X and Z so the mesh follows the camera
@@ -148,17 +188,17 @@ const Planet = ({ followPosition = null }) => {
 
             let finalColor = tWater;
 
-            const sandMix = smoothstep(-1.0, 1.5, h);
+            const sandMix = smoothstep(uSandStart, uSandEnd, h);
             finalColor = mix(finalColor, tSand, sandMix);
 
             // 2. Sand to Grass transition
             // If height is between 1.5 and 3.0, blend to grass
-            const grassMix = smoothstep(1.5, 3.0, h);
+            const grassMix = smoothstep(uGrassStart, uGrassEnd, h);
             finalColor = mix(finalColor, tGrass, grassMix);
 
             // 3. Grass to Rock transition
             // If height is between 6.0 and 8.0, blend to rock
-            const rockMix = smoothstep(6.0, 8.0, h);
+            const rockMix = smoothstep(uRockStart, uRockEnd, h);
             finalColor = mix(finalColor, tRock, rockMix);
 
             return finalColor;
@@ -176,10 +216,21 @@ const Planet = ({ followPosition = null }) => {
                 time,
                 uSegmentSize,
                 uCameraPosition,
+                uFrequency,
+                uAmplitude,
+                uLacunarity,
+                uPersistence,
+                uHeightScale,
+                uSandStart,
+                uSandEnd,
+                uGrassStart,
+                uGrassEnd,
+                uRockStart,
+                uRockEnd,
             }
         }
 
-    }, []);
+    }, [octaves]);
 
     const compute = useCallback(async () => {
         try {
@@ -201,6 +252,21 @@ const Planet = ({ followPosition = null }) => {
         // Use followPosition if provided, otherwise fall back to camera
         const targetPos = followPosition || camera.position;
         uniforms.uCameraPosition.value.copy(targetPos);
+
+        // Update Leva params
+        uniforms.uFrequency.value = frequency;
+        uniforms.uAmplitude.value = amplitude;
+        uniforms.uLacunarity.value = lacunarity;
+        uniforms.uPersistence.value = persistence;
+        uniforms.uHeightScale.value = heightScale;
+
+        uniforms.uSandStart.value = sandStart;
+        uniforms.uSandEnd.value = sandEnd;
+        uniforms.uGrassStart.value = grassStart;
+        uniforms.uGrassEnd.value = grassEnd;
+        uniforms.uRockStart.value = rockStart;
+        uniforms.uRockEnd.value = rockEnd;
+
         gl.compute(nodes.computeUpdate);
     })
 
