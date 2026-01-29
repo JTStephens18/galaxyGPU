@@ -6,12 +6,31 @@ import { TextureLoader } from "three";
 import {
     uniform, float, vec3, vec2,
     storage, instanceIndex, vertexIndex, instancedArray, Fn,
-    cameraPosition, floor, smoothstep, color, texture, mix,
+    cameraPosition, floor, smoothstep, color, texture, mix, Loop,
 } from "three/tsl"
 
 import { cnoise } from "./Perlin"
 
 extend(THREE);
+
+const fmb = Fn(([pos]) => {
+    const p = vec3(pos).toVar();
+    const total = float(0.0).toVar();
+    const amplitude = float(1.0).toVar();
+    const frequency = float(0.05).toVar();
+    const maxVal = float(0.0).toVar();
+
+    Loop({ start: 0, end: 6 }, () => {
+        const noiseVal = cnoise(vec3(p.x.mul(frequency), 0.0, p.z.mul(frequency)));
+
+        total.addAssign(noiseVal.mul(amplitude));
+        maxVal.addAssign(amplitude); // Accumulate max amplitude for normalization
+
+        frequency.mulAssign(2.0); // Lacunarity
+        amplitude.mulAssign(0.5); // Persistence
+    });
+    return total;
+});
 
 const Planet = ({ followPosition = null }) => {
 
@@ -97,8 +116,9 @@ const Planet = ({ followPosition = null }) => {
             // The noise pattern stays fixed in the world, even though the mesh is moving
             // Frequency scaled for larger terrain, amplitude scaled up to maintain hills/valleys
             const noiseInput = vec2(worldPos.x.mul(0.1), worldPos.z.mul(0.1));
-            const noiseValue = cnoise(noiseInput);
-            const height = noiseValue.mul(10); // Amplify height for larger terrain
+            // const noiseValue = cnoise(noiseInput);
+            const noiseValue = fmb(worldPos)
+            const height = noiseValue.mul(15); // Amplify height for larger terrain
 
             // 6. WRITE BACK TO POSITION BUFFER
             // We update the Y height, but we also update X and Z so the mesh follows the camera
