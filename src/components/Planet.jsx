@@ -256,6 +256,8 @@ const Planet = ({ followPosition = null }) => {
                 uHeightScale,
                 uHeightOffset,
                 uWaterFloor,
+                uHorizonDist,
+                uHorizonCurve,
                 uSandStart,
                 uSandEnd,
                 uGrassStart,
@@ -296,6 +298,8 @@ const Planet = ({ followPosition = null }) => {
         uniforms.uHeightScale.value = heightScale;
         uniforms.uHeightOffset.value = heightOffset;
         uniforms.uWaterFloor.value = waterFloor;
+        uniforms.uHorizonDist.value = horizonDistance;
+        uniforms.uHorizonCurve.value = horizonCurve;
 
         uniforms.uSandStart.value = sandStart;
         uniforms.uSandEnd.value = sandEnd;
