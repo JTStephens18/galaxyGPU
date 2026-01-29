@@ -7,7 +7,7 @@ import { TextureLoader } from "three";
 import {
     uniform, float, vec3, vec2,
     storage, instanceIndex, vertexIndex, instancedArray, Fn,
-    cameraPosition, floor, smoothstep, color, texture, mix, Loop,
+    cameraPosition, floor, smoothstep, color, texture, mix, Loop, positionWorld,
 } from "three/tsl"
 
 import { cnoise } from "./Perlin"
@@ -68,15 +68,18 @@ const Planet = ({ followPosition = null }) => {
     });
 
     const [waterTex, sandTex, grassTex, rockTex] = useLoader(TextureLoader, [
-        "/water.png",
+        "/water2.png",
         "/sand.jpg",
-        "/grass.png",
+        "/grass1.png",
         "/rock.jpg"
     ]);
 
     [waterTex, sandTex, grassTex, rockTex].forEach(t => {
         t.wrapS = THREE.RepeatWrapping;
         t.wrapT = THREE.RepeatWrapping;
+
+        t.minFilter = THREE.NearestFilter;
+        t.magFilter = THREE.NearestFilter;
     });
 
     const planeWidth = 100;
@@ -175,13 +178,14 @@ const Planet = ({ followPosition = null }) => {
         // ======== Material Node =========
 
         const colorNode = Fn(() => {
-            const pos = positionBuffer.element(vertexIndex);
+            const pos = positionWorld;
 
             const h = pos.y;
 
-            const worldUV = pos.xz;
+            const worldUV = pos.xz.mul(0.25);
+            const waterWorldUV = pos.xz.mul(1.0);
 
-            const tWater = texture(waterTex, worldUV);
+            const tWater = texture(waterTex, waterWorldUV);
             const tSand = texture(sandTex, worldUV);
             const tGrass = texture(grassTex, worldUV);
             const tRock = texture(rockTex, worldUV);
