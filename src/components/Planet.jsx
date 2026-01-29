@@ -196,7 +196,7 @@ const Planet = ({ followPosition = null }) => {
             // const drop = curveDistance.mul(curveDistance).mul(uHorizonCurve);
 
             const normalizedDist = distToCam.div(uHorizonDist);
-            const drop = normalizedDist.pow(3.0).mul(uHorizonCurve).mul(100.0);
+            const drop = normalizedDist.pow(4.0).mul(uHorizonCurve).mul(100.0);
 
             // 3. Apply the drop to the "Base Level"
             // We subtract the drop from the raw height AND the water floor threshold
@@ -224,7 +224,7 @@ const Planet = ({ followPosition = null }) => {
         const colorNode = Fn(() => {
             const pos = positionWorld;
 
-            const dist = pos.xz.sub(cameraPosition.xz).length();
+            const dist = pos.xz.sub(uCameraPosition.xz).length();
 
             // Re-calculate the drop amount used in the compute shader
             const normalizedDist = dist.div(uHorizonDist);
