@@ -144,7 +144,7 @@ function AirshipController({
         <RigidBody
             ref={rbRef}
             type="dynamic"
-            position={[0, 1, 0]}
+            position={[0, 10, 0]}
             enabledRotations={[false, true, false]}
             linearDamping={0}
             angularDamping={0}

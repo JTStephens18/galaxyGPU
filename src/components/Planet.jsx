@@ -75,11 +75,12 @@ const Planet = ({ followPosition = null }) => {
         rockEnd: { value: 8.0, min: 5, max: 50, step: 0.1 },
     });
 
-    const [waterTex, sandTex, grassTex, rockTex] = useLoader(TextureLoader, [
+    const [waterTex, sandTex, grassTex, rockTex, skyTex] = useLoader(TextureLoader, [
         "/water3.png",
         "/dirt.png",
         "/grass1.png",
-        "/rock.jpg"
+        "/rock.jpg",
+        "/sky2.png",
     ]);
 
     [waterTex, sandTex, grassTex, rockTex].forEach(t => {
@@ -89,6 +90,9 @@ const Planet = ({ followPosition = null }) => {
         t.minFilter = THREE.NearestFilter;
         t.magFilter = THREE.NearestFilter;
     });
+
+    skyTex.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = skyTex;
 
     const planeWidth = 100;
     const planeHeight = 100;

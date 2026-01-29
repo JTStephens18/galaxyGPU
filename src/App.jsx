@@ -47,7 +47,7 @@ function Scene() {
 
   return (
     <>
-      <color attach="background" args={['rgba(0, 0, 0, 1)']} />
+      {/* <color attach="background" args={['rgba(0, 0, 0, 1)']} /> */}
 
       {/* Show OrbitControls in debug mode */}
       {debug && <OrbitControls />}
@@ -78,7 +78,6 @@ const App = () => {
         }}
       >
         <Suspense>
-          <Core />
           <Scene />
         </Suspense>
       </Canvas>
