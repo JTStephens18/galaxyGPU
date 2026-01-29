@@ -1,11 +1,12 @@
-import { useFrame, extend, useThree } from "@react-three/fiber";
+import { useFrame, extend, useThree, useLoader } from "@react-three/fiber";
 import React, { useMemo, useEffect, useCallback, useRef } from "react";
 import * as THREE from 'three/webgpu';
+import { TextureLoader } from "three";
 
 import {
     uniform, float, vec3, vec2,
     storage, instanceIndex, vertexIndex, instancedArray, Fn,
-    cameraPosition, floor,
+    cameraPosition, floor, smoothstep, color, texture, mix,
 } from "three/tsl"
 
 import { cnoise } from "./Perlin"
@@ -15,6 +16,18 @@ extend(THREE);
 const Planet = ({ followPosition = null }) => {
 
     const { scene, gl, camera } = useThree();
+
+    const [waterTex, sandTex, grassTex, rockTex] = useLoader(TextureLoader, [
+        "/water.png",
+        "/sand.jpg",
+        "/grass.png",
+        "/rock.jpg"
+    ]);
+
+    [waterTex, sandTex, grassTex, rockTex].forEach(t => {
+        t.wrapS = THREE.RepeatWrapping;
+        t.wrapT = THREE.RepeatWrapping;
+    });
 
     const planeWidth = 100;
     const planeHeight = 100;
@@ -98,9 +111,44 @@ const Planet = ({ followPosition = null }) => {
             return positionBuffer.element(vertexIndex);
         })();
 
+
+        // ======== Material Node =========
+
+        const colorNode = Fn(() => {
+            const pos = positionBuffer.element(vertexIndex);
+
+            const h = pos.y;
+
+            const worldUV = pos.xz;
+
+            const tWater = texture(waterTex, worldUV);
+            const tSand = texture(sandTex, worldUV);
+            const tGrass = texture(grassTex, worldUV);
+            const tRock = texture(rockTex, worldUV);
+
+            let finalColor = tWater;
+
+            const sandMix = smoothstep(-1.0, 1.5, h);
+            finalColor = mix(finalColor, tSand, sandMix);
+
+            // 2. Sand to Grass transition
+            // If height is between 1.5 and 3.0, blend to grass
+            const grassMix = smoothstep(1.5, 3.0, h);
+            finalColor = mix(finalColor, tGrass, grassMix);
+
+            // 3. Grass to Rock transition
+            // If height is between 6.0 and 8.0, blend to rock
+            const rockMix = smoothstep(6.0, 8.0, h);
+            finalColor = mix(finalColor, tRock, rockMix);
+
+            return finalColor;
+        })();
+
+        // ======== Material Node End =========
         return {
             nodes: {
                 positionNode,
+                colorNode,
                 computeInit,
                 computeUpdate,
             },
@@ -142,9 +190,10 @@ const Planet = ({ followPosition = null }) => {
             <planeGeometry args={[planeWidth, planeHeight, planeWidthSegments, planeHeightSegments]} />
             <meshBasicNodeMaterial
                 positionNode={nodes.positionNode}
+                colorNode={nodes.colorNode}
                 side={THREE.DoubleSide}
-                color="cyan"
-                wireframe={true}
+            // color="cyan"
+            // wireframe={true}
             />
         </mesh>
     )
