@@ -5,14 +5,28 @@ import * as THREE from 'three/webgpu';
 import { TextureLoader } from "three";
 
 import {
-    uniform, float, vec3, vec2,
-    storage, instanceIndex, vertexIndex, instancedArray, Fn,
-    cameraPosition, floor, smoothstep, color, texture, mix, Loop, positionWorld, max, step, dFdx, dFdy, cross, normalize, dot
+    uniform, float, int, vec3, vec2, vec4,
+    storage, instanceIndex, vertexIndex, instancedArray, array, Fn,
+    cameraPosition, floor, smoothstep, color, texture, mix, Loop, positionWorld, max,
+    step, dFdx, dFdy, cross, normalize, dot, screenUV, screenSize, mod,
 } from "three/tsl"
 
 import { cnoise } from "./Perlin"
 
 extend(THREE);
+
+const bayerMatrixNodes = [
+    0.0 / 64.0, 48.0 / 64.0, 12.0 / 64.0, 60.0 / 64.0, 3.0 / 64.0, 51.0 / 64.0, 15.0 / 64.0, 63.0 / 64.0,
+    32.0 / 64.0, 16.0 / 64.0, 44.0 / 64.0, 28.0 / 64.0, 35.0 / 64.0, 19.0 / 64.0, 47.0 / 64.0, 31.0 / 64.0,
+    8.0 / 64.0, 56.0 / 64.0, 4.0 / 64.0, 52.0 / 64.0, 11.0 / 64.0, 59.0 / 64.0, 7.0 / 64.0, 55.0 / 64.0,
+    40.0 / 64.0, 24.0 / 64.0, 36.0 / 64.0, 20.0 / 64.0, 43.0 / 64.0, 27.0 / 64.0, 39.0 / 64.0, 23.0 / 64.0,
+    2.0 / 64.0, 50.0 / 64.0, 14.0 / 64.0, 62.0 / 64.0, 1.0 / 64.0, 49.0 / 64.0, 13.0 / 64.0, 61.0 / 64.0,
+    34.0 / 64.0, 18.0 / 64.0, 46.0 / 64.0, 30.0 / 64.0, 33.0 / 64.0, 17.0 / 64.0, 45.0 / 64.0, 29.0 / 64.0,
+    10.0 / 64.0, 58.0 / 64.0, 6.0 / 64.0, 54.0 / 64.0, 9.0 / 64.0, 57.0 / 64.0, 5.0 / 64.0, 53.0 / 64.0,
+    42.0 / 64.0, 26.0 / 64.0, 38.0 / 64.0, 22.0 / 64.0, 41.0 / 64.0, 25.0 / 64.0, 37.0 / 64.0, 21.0 / 64.0
+].map(v => float(v));
+
+const bayerArray = array(bayerMatrixNodes);
 
 const fbm = Fn(([pos, octaves, frequency, amplitude, lacunarity, persistence]) => {
     const p = vec3(pos).toVar();
@@ -30,6 +44,16 @@ const fbm = Fn(([pos, octaves, frequency, amplitude, lacunarity, persistence]) =
     });
     return total;
 });
+
+const getBayerThreshold = (uv) => {
+    const pixelPos = uv.mul(viewportResolution).toVar();
+    const x = int(pixelPos.x).mod(8);
+    const y = int(pixelPos.y).mod(8);
+    const index = y.mul(8).add(x);
+
+    // We create a TSL float array from the JS array
+    return float(bayerMatrix).element(index);
+};
 
 const Planet = ({ followPosition = null }) => {
 
@@ -79,6 +103,10 @@ const Planet = ({ followPosition = null }) => {
         grassEnd: { value: 3.0, min: 0, max: 20, step: 0.1 },
         rockStart: { value: 6.0, min: 0, max: 30, step: 0.1 },
         rockEnd: { value: 8.0, min: 5, max: 50, step: 0.1 },
+    });
+
+    const { jitterResolution } = useControls('Retro Effects', {
+        jitterResolution: { value: 240, min: 60, max: 1080, step: 1 },
     });
 
     const [waterTex, sandTex, grassTex, rockTex, skyTex] = useLoader(TextureLoader, [
@@ -158,6 +186,8 @@ const Planet = ({ followPosition = null }) => {
         const uRockStart = uniform(rockStart);
         const uRockEnd = uniform(rockEnd);
 
+        const uJitterRes = uniform(jitterResolution);
+
         const computeInit = Fn(() => {
             // Wrap storage buffer in TSL storage node    
             // const positionBuffer = storage(positionStorageAttribute, 'vec3', count);
@@ -224,11 +254,45 @@ const Planet = ({ followPosition = null }) => {
         })().compute(count);
 
         const positionNode = Fn(() => {
-            return positionBuffer.element(vertexIndex);
+            const pos = positionBuffer.element(vertexIndex);
+            return pos;
         })();
 
 
         // ======== Material Node =========
+
+        const applyRetroEffects = Fn(([inputColor, colorNum]) => {
+            const uv = screenUV;
+            const col = inputColor.rgb.toVar();
+
+            // Get pixel coordinates
+            const pixelPos = uv.mul(screenSize).toVar();
+
+            // Calculate Bayer index (8x8 grid)
+            const x = int(pixelPos.x).mod(8);
+            const y = int(pixelPos.y).mod(8);
+            const index = y.mul(8).add(x);
+
+            // Pull threshold from our TSL array
+            const threshold = bayerArray.element(index);
+
+            // 1. Dithering Logic
+            // col.addAssign(threshold.mul(0.6));
+            const ditherStrength = float(0.6);
+            col.addAssign(threshold.sub(0.8).mul(ditherStrength));
+            const levels = colorNum.sub(1.0);
+            col.assign(col.mul(levels).add(0.5).floor().div(levels));
+
+            // 2. CRT Mask (Vertical stripes)
+            // const stripe = int(pixelPos.x).mod(3);
+            // const mask = vec3(
+            //     stripe.equal(0).select(1.2, 0.8),
+            //     stripe.equal(1).select(1.2, 0.8),
+            //     stripe.equal(2).select(1.2, 0.8)
+            // );
+
+            return col;
+        });
 
         const colorNode = Fn(() => {
             const pos = positionWorld;
@@ -273,7 +337,13 @@ const Planet = ({ followPosition = null }) => {
             const fogFactor = smoothstep(uFogNear, uFogFar, dist);
             finalColor = mix(finalColor, uFogColor, fogFactor);
 
-            return finalColor;
+            // return finalColor;
+
+            const colorNum = float(16.0);
+            // Mul final color by a smaller number to make colors deeper
+            const retroColor = applyRetroEffects(finalColor, colorNum);
+
+            return vec4(retroColor, 1.0);
         })();
 
         // ======== Material Node End =========
@@ -306,6 +376,7 @@ const Planet = ({ followPosition = null }) => {
                 uFogColor,
                 uFogNear,
                 uFogFar,
+                uJitterRes,
             }
         }
 
@@ -353,6 +424,8 @@ const Planet = ({ followPosition = null }) => {
         uniforms.uFogColor.value.set(fogColor);
         uniforms.uFogNear.value = fogNear;
         uniforms.uFogFar.value = fogFar;
+
+        uniforms.uJitterRes.value = jitterResolution;
 
         gl.compute(nodes.computeUpdate);
     })
