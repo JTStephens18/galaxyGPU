@@ -8,7 +8,7 @@ import {
     uniform, float, int, vec3, vec2, vec4,
     storage, instanceIndex, vertexIndex, instancedArray, array, Fn,
     cameraPosition, floor, smoothstep, color, texture, mix, Loop, positionWorld, max,
-    step, dFdx, dFdy, cross, normalize, dot, screenUV, screenSize, mod,
+    step, dFdx, dFdy, cross, normalize, dot, screenUV, screenSize, mod, cameraProjectionMatrix, modelViewMatrix,
 } from "three/tsl"
 
 import { cnoise } from "./Perlin"
@@ -284,14 +284,15 @@ const Planet = ({ followPosition = null }) => {
             col.assign(col.mul(levels).add(0.5).floor().div(levels));
 
             // 2. CRT Mask (Vertical stripes)
-            // const stripe = int(pixelPos.x).mod(3);
-            // const mask = vec3(
-            //     stripe.equal(0).select(1.2, 0.8),
-            //     stripe.equal(1).select(1.2, 0.8),
-            //     stripe.equal(2).select(1.2, 0.8)
-            // );
+            const stripe = int(pixelPos.x).mod(3);
+            const mask = vec3(
+                stripe.equal(0).select(1.2, 0.8),
+                stripe.equal(1).select(1.2, 0.8),
+                stripe.equal(2).select(1.2, 0.8)
+            );
 
             return col;
+            // return col.mul(mask);
         });
 
         const colorNode = Fn(() => {
@@ -340,7 +341,6 @@ const Planet = ({ followPosition = null }) => {
             // return finalColor;
 
             const colorNum = float(16.0);
-            // Mul final color by a smaller number to make colors deeper
             const retroColor = applyRetroEffects(finalColor, colorNum);
 
             return vec4(retroColor, 1.0);
