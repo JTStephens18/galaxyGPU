@@ -245,7 +245,7 @@ function AirshipController({
             </RigidBody>
 
             {/* Wrecking Ball Anchor */}
-            <Anchor
+            {/* <Anchor
                 shipRef={rbRef}
                 chainLength={chainLength}
                 anchorMass={anchorMass}
@@ -255,7 +255,7 @@ function AirshipController({
                 gravityStrength={gravityStrength}
                 trailLength={trailLength}
                 chainSegmentCount={chainSegmentCount}
-            />
+            /> */}
         </>
     );
 }
