@@ -45,7 +45,10 @@ const Planet = ({ followPosition = null }) => {
         heightOffset,
         waterFloor,
         horizonDistance,
-        horizonCurve
+        horizonCurve,
+        fogColor,
+        fogNear,
+        fogFar
     } = useControls('Planet Terrain', {
         octaves: { value: 2, min: 1, max: 12, step: 1 },
         frequency: { value: 0.06, min: 0.001, max: 0.5, step: 0.001 },
@@ -57,6 +60,9 @@ const Planet = ({ followPosition = null }) => {
         waterFloor: { value: -2.0, min: -20, max: 0, step: 0.1 },
         horizonDistance: { value: 116, min: 10, max: 200 },
         horizonCurve: { value: 0.06, min: 0, max: 0.5, step: 0.01 },
+        fogColor: '#aec7ff',
+        fogNear: { value: 80, min: 0, max: 500 },
+        fogFar: { value: 150, min: 0, max: 500 },
     });
 
     const {
@@ -141,6 +147,9 @@ const Planet = ({ followPosition = null }) => {
         const uWaterFloor = uniform(waterFloor);
         const uHorizonDist = uniform(horizonDistance);
         const uHorizonCurve = uniform(horizonCurve);
+        const uFogColor = uniform(color(fogColor));
+        const uFogNear = uniform(fogNear);
+        const uFogFar = uniform(fogFar);
 
         const uSandStart = uniform(sandStart);
         const uSandEnd = uniform(sandEnd);
@@ -260,6 +269,10 @@ const Planet = ({ followPosition = null }) => {
             const rockMix = smoothstep(uRockStart, uRockEnd, h);
             finalColor = mix(finalColor, tRock, rockMix);
 
+            // Fog calculation
+            const fogFactor = smoothstep(uFogNear, uFogFar, dist);
+            finalColor = mix(finalColor, uFogColor, fogFactor);
+
             return finalColor;
         })();
 
@@ -290,6 +303,9 @@ const Planet = ({ followPosition = null }) => {
                 uGrassEnd,
                 uRockStart,
                 uRockEnd,
+                uFogColor,
+                uFogNear,
+                uFogFar,
             }
         }
 
@@ -333,6 +349,10 @@ const Planet = ({ followPosition = null }) => {
         uniforms.uGrassEnd.value = grassEnd;
         uniforms.uRockStart.value = rockStart;
         uniforms.uRockEnd.value = rockEnd;
+
+        uniforms.uFogColor.value.set(fogColor);
+        uniforms.uFogNear.value = fogNear;
+        uniforms.uFogFar.value = fogFar;
 
         gl.compute(nodes.computeUpdate);
     })
