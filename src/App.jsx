@@ -33,6 +33,9 @@ const keyboardMap = [
   { name: 'left', keys: ['KeyA', 'ArrowLeft'] },
   { name: 'right', keys: ['KeyD', 'ArrowRight'] },
   { name: 'sprint', keys: ['ShiftLeft', 'ShiftRight'] },
+  { name: 'lasso', keys: ['Space'] },
+  { name: 'ascend', keys: ['KeyE'] },
+  { name: 'descend', keys: ['KeyQ'] },
 ]
 
 // Scene component to use hooks inside Canvas

@@ -1,9 +1,11 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useKeyboardControls } from '@react-three/drei';
 import { RigidBody } from '@react-three/rapier';
+import { useControls } from 'leva';
 import * as THREE from 'three/webgpu';
 import Player from './Player';
+import Anchor from './Anchor';
 
 /**
  * AirshipController - Hovercraft-style movement controller
@@ -36,6 +38,54 @@ function AirshipController({
     // Get keyboard input state
     const [, getKeys] = useKeyboardControls();
 
+    // Leva controls for chain length
+    const {
+        chainRestLength,
+        chainMinLength,
+        chainMaxLength,
+        reelSpeed,
+        extendSpeed,
+    } = useControls('Chain Controls', {
+        chainRestLength: { value: 6, min: 2, max: 15, step: 0.5 },
+        chainMinLength: { value: 2, min: 1, max: 5, step: 0.5 },
+        chainMaxLength: { value: 12, min: 8, max: 25, step: 1 },
+        reelSpeed: { value: 8, min: 1, max: 20, step: 1 },
+        extendSpeed: { value: 15, min: 5, max: 30, step: 1 },
+    });
+
+    // Leva controls for anchor physics
+    const {
+        anchorMass,
+        anchorRadius,
+        springStiffness,
+        springDamping,
+        gravityStrength,
+        trailLength,
+        chainSegmentCount,
+    } = useControls('Anchor Physics', {
+        anchorMass: { value: 5, min: 1, max: 20, step: 0.5 },
+        anchorRadius: { value: 0.5, min: 0.2, max: 2, step: 0.1 },
+        springStiffness: { value: 80, min: 10, max: 200, step: 5 },
+        springDamping: { value: 8, min: 0, max: 30, step: 1 },
+        gravityStrength: { value: 20, min: 0, max: 50, step: 1 },
+        trailLength: { value: 6, min: 0, max: 12, step: 1 },
+        chainSegmentCount: { value: 10, min: 4, max: 20, step: 1 },
+    });
+
+    // Leva controls for flight limits
+    const {
+        minHeight,
+        maxHeight,
+        verticalSpeed,
+    } = useControls('Flight Limits', {
+        minHeight: { value: 3, min: 0, max: 20, step: 1 },
+        maxHeight: { value: 20, min: 20, max: 200, step: 5 },
+        verticalSpeed: { value: 8, min: 1, max: 20, step: 1 },
+    });
+
+    // Current chain length state
+    const [chainLength, setChainLength] = useState(6);
+
     // Mutable state for smoothing (avoid re-renders)
     const state = useMemo(() => ({
         currentVelocity: new THREE.Vector3(),
@@ -59,8 +109,22 @@ function AirshipController({
     useFrame((frameState, delta) => {
         if (!rbRef.current) return;
 
-        const { forward, backward, left, right, sprint } = getKeys();
+        const { forward, backward, left, right, sprint, lasso, ascend, descend } = getKeys();
         const rb = rbRef.current;
+
+        // === CHAIN LENGTH CONTROL (Lasso/Whip) ===
+        if (lasso) {
+            // Reel in - shorten chain
+            setChainLength(prev => Math.max(prev - reelSpeed * delta, chainMinLength));
+        } else {
+            // Extend back to rest length (or max if whipping)
+            setChainLength(prev => {
+                if (prev < chainRestLength) {
+                    return Math.min(prev + extendSpeed * delta, chainRestLength);
+                }
+                return prev;
+            });
+        }
 
         // Get current position from physics body
         const position = rb.translation();
@@ -98,10 +162,24 @@ function AirshipController({
         const dampFactor = 1 - Math.exp(-delta / smoothTime);
         state.currentVelocity.lerp(state.targetVelocity, dampFactor);
 
-        // Apply velocity to physics body (keep Y at 0 for flat movement)
+        // Apply velocity to physics body
+        // Calculate vertical velocity with height clamping
+        let verticalVel = 0;
+        const currentY = position.y;
+
+        if (ascend && currentY < maxHeight) {
+            verticalVel = verticalSpeed;
+        } else if (descend && currentY > minHeight) {
+            verticalVel = -verticalSpeed;
+        }
+
+        // Clamp position if at limits
+        if (currentY >= maxHeight && verticalVel > 0) verticalVel = 0;
+        if (currentY <= minHeight && verticalVel < 0) verticalVel = 0;
+
         rb.setLinvel({
             x: state.currentVelocity.x,
-            y: 0,
+            y: verticalVel,
             z: state.currentVelocity.z
         }, true);
 
@@ -141,29 +219,44 @@ function AirshipController({
     });
 
     return (
-        <RigidBody
-            ref={rbRef}
-            type="dynamic"
-            position={[0, 10, 0]}
-            enabledRotations={[false, true, false]}
-            linearDamping={0}
-            angularDamping={0}
-            gravityScale={0}
-        >
-            <Player ref={playerRef} />
-            {/* Direction arrow helper */}
-            <arrowHelper
-                ref={arrowRef}
-                args={[
-                    new THREE.Vector3(0, 0, -1), // direction
-                    new THREE.Vector3(0, 0, 0),  // origin
-                    1,                            // length
-                    0x00ff00,                     // color (green)
-                    0.2,                          // headLength
-                    0.1                           // headWidth
-                ]}
+        <>
+            <RigidBody
+                ref={rbRef}
+                type="dynamic"
+                position={[0, 10, 0]}
+                enabledRotations={[false, true, false]}
+                linearDamping={0}
+                angularDamping={0}
+                gravityScale={0}
+            >
+                <Player ref={playerRef} />
+                {/* Direction arrow helper */}
+                <arrowHelper
+                    ref={arrowRef}
+                    args={[
+                        new THREE.Vector3(0, 0, -1), // direction
+                        new THREE.Vector3(0, 0, 0),  // origin
+                        1,                            // length
+                        0x00ff00,                     // color (green)
+                        0.2,                          // headLength
+                        0.1                           // headWidth
+                    ]}
+                />
+            </RigidBody>
+
+            {/* Wrecking Ball Anchor */}
+            <Anchor
+                shipRef={rbRef}
+                chainLength={chainLength}
+                anchorMass={anchorMass}
+                anchorRadius={anchorRadius}
+                springStiffness={springStiffness}
+                springDamping={springDamping}
+                gravityStrength={gravityStrength}
+                trailLength={trailLength}
+                chainSegmentCount={chainSegmentCount}
             />
-        </RigidBody>
+        </>
     );
 }
 
