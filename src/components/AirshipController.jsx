@@ -6,6 +6,9 @@ import { useControls } from 'leva';
 import * as THREE from 'three/webgpu';
 import Player from './Player';
 import Anchor from './Anchor';
+import MouseAnchorController from './MouseAnchorController';
+import { GameJuiceProcessor, useGameJuice } from './GameJuice';
+import Enemy from './Enemy';
 
 /**
  * AirshipController - Hovercraft-style movement controller
@@ -33,7 +36,12 @@ function AirshipController({
     const rbRef = useRef();
     const playerRef = useRef();
     const arrowRef = useRef();
+    const anchorRef = useRef();
+    const enemyRefs = useRef([]);
     const camera = useThree((state) => state.camera);
+
+    // Game juice hooks
+    const { triggerHitEffect, triggerKillEffect } = useGameJuice();
 
     // Get keyboard input state
     const [, getKeys] = useKeyboardControls();
@@ -81,6 +89,19 @@ function AirshipController({
         minHeight: { value: 3, min: 0, max: 20, step: 1 },
         maxHeight: { value: 20, min: 20, max: 200, step: 5 },
         verticalSpeed: { value: 8, min: 1, max: 20, step: 1 },
+    });
+
+    // Leva controls for mouse aiming
+    const {
+        enableMouseAim,
+        mouseAttractStrength,
+        aimAssistStrength,
+        aimAssistRange,
+    } = useControls('Mouse Aiming', {
+        enableMouseAim: { value: true },
+        mouseAttractStrength: { value: 5, min: 0, max: 20, step: 1 },
+        aimAssistStrength: { value: 3, min: 0, max: 10, step: 0.5 },
+        aimAssistRange: { value: 5, min: 2, max: 15, step: 1 },
     });
 
     // Current chain length state
@@ -245,7 +266,8 @@ function AirshipController({
             </RigidBody>
 
             {/* Wrecking Ball Anchor */}
-            {/* <Anchor
+            <Anchor
+                ref={anchorRef}
                 shipRef={rbRef}
                 chainLength={chainLength}
                 anchorMass={anchorMass}
@@ -255,10 +277,48 @@ function AirshipController({
                 gravityStrength={gravityStrength}
                 trailLength={trailLength}
                 chainSegmentCount={chainSegmentCount}
-            /> */}
+                enemies={enemyRefs.current.filter(e => e?.isAlive?.())}
+                aimAssistStrength={aimAssistStrength}
+                aimAssistRange={aimAssistRange}
+            />
+
+            {/* Mouse-guided anchor control */}
+            <MouseAnchorController
+                anchorRef={anchorRef}
+                enabled={enableMouseAim}
+                attractStrength={mouseAttractStrength}
+            />
+
+            {/* Game Juice Processor (screen shake, hitstop) */}
+            <GameJuiceProcessor />
+
+            {/* Test Enemies */}
+            <Enemy
+                ref={(el) => (enemyRefs.current[0] = el)}
+                position={[5, 5, -10]}
+                health={3}
+                onHit={(damage) => triggerHitEffect(damage)}
+                onDeath={() => triggerKillEffect()}
+            />
+            <Enemy
+                ref={(el) => (enemyRefs.current[1] = el)}
+                position={[-8, 5, -15]}
+                health={5}
+                color="#ff8844"
+                onHit={(damage) => triggerHitEffect(damage)}
+                onDeath={() => triggerKillEffect()}
+            />
+            <Enemy
+                ref={(el) => (enemyRefs.current[2] = el)}
+                position={[0, 5, -20]}
+                health={4}
+                color="#ff44aa"
+                size={1.5}
+                onHit={(damage) => triggerHitEffect(damage)}
+                onDeath={() => triggerKillEffect()}
+            />
         </>
     );
 }
 
 export default AirshipController;
-

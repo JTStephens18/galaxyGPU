@@ -16,18 +16,43 @@ const Anchor = forwardRef(function Anchor({
     shipRef,
     chainLength = 6,
     anchorMass = 5,
-    anchorRadius = 0.5,
+    anchorRadius = 0.8, // Increased for easier hits
     springStiffness = 50,
     springDamping = 5,
     gravityStrength = 15,
     trailLength = 6,
     trailOpacityFalloff = 0.6,
     chainSegmentCount = 10,
+    // Aim assist props
+    enemies = [],
+    aimAssistStrength = 5, // Increased for better homing
+    aimAssistRange = 8, // Increased range
+    // Collision callback
+    onEnemyCollision = null,
 }, ref) {
     const anchorRef = useRef();
 
-    // Expose anchor ref to parent
-    useImperativeHandle(ref, () => anchorRef.current);
+    // Expose anchor ref and utility methods to parent
+    useImperativeHandle(ref, () => ({
+        // Direct access to RigidBody
+        getRigidBody: () => anchorRef.current,
+        // Get current position
+        getPosition: () => {
+            if (anchorRef.current) {
+                const pos = anchorRef.current.translation();
+                return new THREE.Vector3(pos.x, pos.y, pos.z);
+            }
+            return new THREE.Vector3();
+        },
+        // Get current velocity (for damage calculation)
+        getVelocity: () => {
+            if (anchorRef.current) {
+                const vel = anchorRef.current.linvel();
+                return new THREE.Vector3(vel.x, vel.y, vel.z);
+            }
+            return new THREE.Vector3();
+        },
+    }));
 
     // Trail buffer for ghost effect (stable ref, not state)
     const trailBuffer = useRef([]);
@@ -37,6 +62,7 @@ const Anchor = forwardRef(function Anchor({
         tempVec3: new THREE.Vector3(),
         direction: new THREE.Vector3(),
         velocity: new THREE.Vector3(),
+        toEnemy: new THREE.Vector3(),
     }), []);
 
     useFrame((frameState, delta) => {
@@ -86,6 +112,49 @@ const Anchor = forwardRef(function Anchor({
         // === GRAVITY: Pull anchor down ===
         anchor.applyImpulse({ x: 0, y: -gravityStrength * delta, z: 0 }, true);
 
+        // === AIM ASSIST: Subtle homing toward nearest enemy ===
+        if (enemies.length > 0 && aimAssistStrength > 0) {
+            let nearestEnemy = null;
+            let nearestDist = aimAssistRange;
+
+            // Find nearest enemy within range
+            for (const enemy of enemies) {
+                if (!enemy) continue;
+
+                // Support both raw positions and refs with getPosition
+                const enemyPos = enemy.getPosition ? enemy.getPosition() : enemy;
+                if (!enemyPos) continue;
+
+                const dx = enemyPos.x - anchorPos.x;
+                const dz = enemyPos.z - anchorPos.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestEnemy = enemyPos;
+                }
+            }
+
+            // Apply subtle homing force toward nearest enemy
+            if (nearestEnemy) {
+                state.toEnemy.set(
+                    nearestEnemy.x - anchorPos.x,
+                    0, // Keep force horizontal
+                    nearestEnemy.z - anchorPos.z
+                ).normalize();
+
+                // Strength falls off with distance (stronger when closer)
+                const falloff = 1 - (nearestDist / aimAssistRange);
+                const force = falloff * aimAssistStrength;
+
+                anchor.applyImpulse({
+                    x: state.toEnemy.x * force * delta,
+                    y: 0,
+                    z: state.toEnemy.z * force * delta,
+                }, true);
+            }
+        }
+
         // === UPDATE TRAIL BUFFER ===
         trailBuffer.current.unshift({
             x: anchorPos.x,
@@ -96,6 +165,28 @@ const Anchor = forwardRef(function Anchor({
             trailBuffer.current.pop();
         }
     });
+
+    // Handle collision with enemies
+    const handleCollision = (event) => {
+        if (!onEnemyCollision) return;
+
+        // Get the other collider's rigid body
+        const otherBody = event.other.rigidBody;
+        if (!otherBody) return;
+
+        // Calculate impact velocity for damage
+        const vel = anchorRef.current?.linvel();
+        const speed = vel ? Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z) : 0;
+
+        // Only register hits with meaningful velocity
+        if (speed > 1) {
+            onEnemyCollision({
+                otherBody,
+                speed,
+                position: event.other.rigidBody.translation(),
+            });
+        }
+    };
 
     return (
         <>
@@ -109,6 +200,7 @@ const Anchor = forwardRef(function Anchor({
                 angularDamping={0.5}
                 colliders="ball"
                 gravityScale={0} // We apply our own gravity
+                onCollisionEnter={handleCollision}
             >
                 {/* Icosahedron mesh for PS1 aesthetic */}
                 <mesh>
